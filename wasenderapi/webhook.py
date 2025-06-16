@@ -4,6 +4,11 @@ from typing import Dict, Any, Optional, List, Union, TypeVar, Generic, Literal
 from pydantic import BaseModel, Field
 from .groups import GroupParticipant
 
+# NOTE: All webhook event model fields are now optional to handle the dynamic 
+# nature of webhook events. Different webhook events may contain different 
+# subsets of fields, so making them optional allows for more flexible parsing
+# without validation errors.
+
 WEBHOOK_SIGNATURE_HEADER = 'x-webhook-signature'
 
 def verify_wasender_webhook_signature(
@@ -51,9 +56,9 @@ EventType = TypeVar('EventType', bound=WasenderWebhookEventType)
 DataType = TypeVar('DataType')
 
 class BaseWebhookEvent(BaseModel, Generic[EventType, DataType]):
-    event: EventType
+    event: Optional[EventType] = None
     timestamp: Optional[int] = None
-    data: DataType
+    data: Optional[DataType] = None
     session_id: Optional[str] = Field(None, alias="sessionId")
 
     def __getitem__(self, key: str) -> Any:
@@ -66,14 +71,14 @@ class BaseWebhookEvent(BaseModel, Generic[EventType, DataType]):
             raise KeyError(key)
 
 class MessageKey(BaseModel):
-    id: str
-    from_me: bool = Field(..., alias="fromMe")
-    remote_jid: str = Field(..., alias="remoteJid")
+    id: Optional[str] = None
+    from_me: Optional[bool] = Field(None, alias="fromMe")
+    remote_jid: Optional[str] = Field(None, alias="remoteJid")
     participant: Optional[str] = None
 
 # Chat Event Models
 class ChatEntry(BaseModel):
-    id: str
+    id: Optional[str] = None
     name: Optional[str] = None
     conversation_timestamp: Optional[int] = Field(None, alias="conversationTimestamp")
     unread_count: Optional[int] = Field(None, alias="unreadCount")
@@ -82,8 +87,8 @@ class ChatEntry(BaseModel):
 
 # Group Event Models
 class GroupMetadata(BaseModel):
-    jid: str
-    subject: str
+    jid: Optional[str] = None
+    subject: Optional[str] = None
     creation: Optional[int] = None
     owner: Optional[str] = None
     desc: Optional[str] = None
@@ -92,13 +97,13 @@ class GroupMetadata(BaseModel):
     restrict: Optional[bool] = None
 
 class GroupParticipantsUpdateData(BaseModel):
-    jid: str
-    participants: List[Union[str, GroupParticipant]]
-    action: Literal['add', 'remove', 'promote', 'demote']
+    jid: Optional[str] = None
+    participants: Optional[List[Union[str, GroupParticipant]]] = None
+    action: Optional[Literal['add', 'remove', 'promote', 'demote']] = None
 
 # Contact Event Models
 class ContactEntry(BaseModel):
-    jid: str
+    jid: Optional[str] = None
     name: Optional[str] = None
     notify: Optional[str] = None
     verified_name: Optional[str] = Field(None, alias="verifiedName")
@@ -117,54 +122,54 @@ class MessageContent(BaseModel):
     location_message: Optional[Dict[str, Any]] = Field(None, alias="locationMessage")
 
 class MessagesUpsertData(BaseModel):
-    key: MessageKey
+    key: Optional[MessageKey] = None
     message: Optional[MessageContent] = None
     push_name: Optional[str] = Field(None, alias="pushName")
     message_timestamp: Optional[int] = Field(None, alias="messageTimestamp")
 
 class MessageUpdate(BaseModel):
-    status: str
+    status: Optional[str] = None
 
 class MessagesUpdateDataEntry(BaseModel):
-    key: MessageKey
-    update: MessageUpdate
+    key: Optional[MessageKey] = None
+    update: Optional[MessageUpdate] = None
 
 class MessagesDeleteData(BaseModel):
-    keys: List[MessageKey]
+    keys: Optional[List[MessageKey]] = None
 
 class Reaction(BaseModel):
-    text: str
-    key: MessageKey
+    text: Optional[str] = None
+    key: Optional[MessageKey] = None
     sender_timestamp_ms: Optional[str] = Field(None, alias="senderTimestampMs")
     read: Optional[bool] = None
 
 class MessagesReactionDataEntry(BaseModel):
-    key: MessageKey
-    reaction: Reaction
+    key: Optional[MessageKey] = None
+    reaction: Optional[Reaction] = None
 
 # Message Receipt Models
 class Receipt(BaseModel):
-    user_jid: str = Field(..., alias="userJid")
-    status: str
+    user_jid: Optional[str] = Field(None, alias="userJid")
+    status: Optional[str] = None
     t: Optional[int] = None
 
 class MessageReceiptUpdateDataEntry(BaseModel):
-    key: MessageKey
-    receipt: Receipt
+    key: Optional[MessageKey] = None
+    receipt: Optional[Receipt] = None
 
 # Session Event Models
 class MessageSentData(BaseModel):
-    key: MessageKey
+    key: Optional[MessageKey] = None
     message: Optional[MessageContent] = None
     status: Optional[str] = None
 
 class SessionStatusData(BaseModel):
-    status: Literal["CONNECTED", "DISCONNECTED", "NEED_SCAN", "CONNECTING", "LOGGED_OUT", "EXPIRED"]
+    status: Optional[Literal["CONNECTED", "DISCONNECTED", "NEED_SCAN", "CONNECTING", "LOGGED_OUT", "EXPIRED"]] = None
     session_id: Optional[str] = Field(None, alias="sessionId")
     reason: Optional[str] = None
 
 class QrCodeUpdatedData(BaseModel):
-    qr: str
+    qr: Optional[str] = None
     session_id: Optional[str] = Field(None, alias="sessionId")
 
 # Define specific event types using the generic BaseWebhookEvent
@@ -197,21 +202,3 @@ WasenderWebhookEvent = Union[
     MessagesUpsertEvent, MessagesUpdateEvent, MessagesDeleteEvent, MessagesReactionEvent,
     MessageReceiptUpdateEvent, MessageSentEvent, SessionStatusEvent, QrCodeUpdatedEvent
 ]
-
-# Helper types for partial updates if needed (conceptual)
-class PartialChatEntry(ChatEntry):
-    id: Optional[str] = None
-    name: Optional[str] = None
-    conversation_timestamp: Optional[int] = Field(None, alias="conversationTimestamp")
-    unread_count: Optional[int] = Field(None, alias="unreadCount")
-    mute_end_time: Optional[int] = Field(None, alias="muteEndTime")
-    is_spam: Optional[bool] = Field(None, alias="isSpam")
-
-class PartialGroupMetadata(GroupMetadata):
-    jid: Optional[str] = None
-    subject: Optional[str] = None
-    # ... make other fields optional
-
-class PartialContactEntry(ContactEntry):
-    jid: Optional[str] = None
-    # ... make other fields optional 
