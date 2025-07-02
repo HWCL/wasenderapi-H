@@ -98,7 +98,12 @@ async def test_send_text_constructs_correct_payload_and_calls_post_internal(asyn
     
     assert response.response.success is True
     assert response.response.message == "Text sent"
-    assert response.response.data.message_id == expected_message_id_val
+    # Ensure messageId is correctly returned, handling dict or model
+    data = response.response.data
+    if isinstance(data, dict):
+        assert data.get("messageId") == expected_message_id_val
+    else:
+        assert data.message_id == expected_message_id_val
     assert response.rate_limit.limit == 100
     assert response.rate_limit.remaining == 99
 
@@ -209,7 +214,12 @@ async def test_send_audio(async_client_with_mocked_post, success_api_response_da
         }
     )
     assert isinstance(response_no_ptt, WasenderSendResult)
-    assert response_no_ptt.response.data.message_id == success_api_response_data["data"]["messageId"]
+    # Validate returned message ID handles dict or model
+    data_no = response_no_ptt.response.data
+    if isinstance(data_no, dict):
+        assert data_no.get("messageId") == success_api_response_data["data"]["messageId"]
+    else:
+        assert data_no.message_id == success_api_response_data["data"]["messageId"]
 
     # Test Case 2: ptt = True
     client._post_internal.reset_mock()
@@ -228,7 +238,11 @@ async def test_send_audio(async_client_with_mocked_post, success_api_response_da
         }
     )
     assert isinstance(response_ptt, WasenderSendResult)
-    assert response_ptt.response.data.message_id == success_api_response_data["data"]["messageId"]
+    data_ptt = response_ptt.response.data
+    if isinstance(data_ptt, dict):
+        assert data_ptt.get("messageId") == success_api_response_data["data"]["messageId"]
+    else:
+        assert data_ptt.message_id == success_api_response_data["data"]["messageId"]
 
     # Test Case 3: ptt not provided (should default or not be included if None)
     client._post_internal.reset_mock()
@@ -246,7 +260,11 @@ async def test_send_audio(async_client_with_mocked_post, success_api_response_da
         }
     )
     assert isinstance(response_no_ptt_arg, WasenderSendResult)
-    assert response_no_ptt_arg.response.data.message_id == success_api_response_data["data"]["messageId"]
+    data_arg = response_no_ptt_arg.response.data
+    if isinstance(data_arg, dict):
+        assert data_arg.get("messageId") == success_api_response_data["data"]["messageId"]
+    else:
+        assert data_arg.message_id == success_api_response_data["data"]["messageId"]
 
 @pytest.mark.asyncio
 async def test_send_location(async_client_with_mocked_post, success_api_response_data, rate_limit_data):

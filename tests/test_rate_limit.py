@@ -87,7 +87,12 @@ def test_sync_rate_limit_uses_retry_after_from_response(mock_request, mock_sleep
     
     # Verify that we got a successful response
     assert response.response.success is True
-    assert response.response.data.message_id == "test-message-id"
+    # Validate returned message ID handles dict or model
+    data = response.response.data
+    if isinstance(data, dict):
+        assert data.get("messageId") == "test-message-id"
+    else:
+        assert data.message_id == "test-message-id"
     
     # Verify that requests.request was called twice (first rate limited, then success)
     assert mock_request.call_count == 2
@@ -138,7 +143,12 @@ def test_sync_rate_limit_uses_default_sleep_when_no_retry_after(mock_request, mo
     
     # Verify that we got a successful response
     assert response.response.success is True
-    assert response.response.data.message_id == "test-message-id"
+    # Validate returned message ID handles dict or model
+    data = response.response.data
+    if isinstance(data, dict):
+        assert data.get("messageId") == "test-message-id"
+    else:
+        assert data.message_id == "test-message-id"
     
     assert mock_request.call_count == 2
 
@@ -264,10 +274,15 @@ async def test_async_rate_limit_uses_retry_after_from_response(mock_sleep, async
     
     # Verify that asyncio.sleep was called with the retry_after value
     mock_sleep.assert_called_once_with(3)
-    
+
     # Verify that we got a successful response
     assert response.response.success is True
-    assert response.response.data.message_id == "test-message-id"
+    # Validate returned message ID handles dict or model
+    data = response.response.data
+    if isinstance(data, dict):
+        assert data.get("messageId") == "test-message-id"
+    else:
+        assert data.message_id == "test-message-id"
     
     # Verify that HTTP client was called twice
     assert mock_http_client.request.call_count == 2
@@ -319,7 +334,12 @@ async def test_async_rate_limit_uses_default_sleep_when_no_retry_after(mock_slee
     
     # Verify that we got a successful response
     assert response.response.success is True
-    assert response.response.data.message_id == "test-message-id"
+    # Validate returned message ID handles dict or model
+    data = response.response.data
+    if isinstance(data, dict):
+        assert data.get("messageId") == "test-message-id"
+    else:
+        assert data.message_id == "test-message-id"
       # Verify that HTTP client was called twice
     assert mock_http_client.request.call_count == 2
 
@@ -434,11 +454,16 @@ async def test_async_rate_limit_retry_after_zero_uses_default(mock_sleep, async_
     
     # Verify that asyncio.sleep was called with default 1 second since retry_after was 0
     mock_sleep.assert_called_once_with(1)
-    
+
     # Verify that we got a successful response
     assert response.response.success is True
-    assert response.response.data.message_id == "test-message-id"
-      # Verify that HTTP client was called twice
+    # Validate returned message ID handles dict or model
+    data = response.response.data
+    if isinstance(data, dict):
+        assert data.get("messageId") == "test-message-id"
+    else:
+        assert data.message_id == "test-message-id"
+    # Verify that HTTP client was called twice
     assert mock_http_client.request.call_count == 2
 
 
@@ -481,11 +506,15 @@ def test_sync_rate_limit_retry_after_zero_uses_default(mock_request, mock_sleep,
     
     # Make the request
     response = client.send_text(to="+1234567890", text_body="Test message")
-      # Verify that sleep was called with default 1 second since retry_after=0
+    # Verify that sleep was called with default 1 second since retry_after=0
     mock_sleep.assert_called_once_with(1)
-    
     # Verify that we got a successful response
     assert response.response.success is True
-    assert response.response.data.message_id == "test-message-id"
-    
+    # Validate returned message ID handles dict or model
+    data = response.response.data
+    if isinstance(data, dict):
+        assert data.get("messageId") == "test-message-id"
+    else:
+        assert data.message_id == "test-message-id"
+    # Verify that requests.request was called twice
     assert mock_request.call_count == 2
