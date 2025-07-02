@@ -1,4 +1,5 @@
 from typing import Optional, List, Dict, Any, Union
+from typing import Literal
 from pydantic import BaseModel, Field, HttpUrl
 from datetime import datetime
 
@@ -82,17 +83,16 @@ ContactCard = ContactCardPayload
 LocationPin = LocationPinPayload
 
 class WasenderMessageSentData(BaseModel):
-    message_id: str = Field(alias="messageId")
-    status: Optional[str] = None # e.g., "PENDING", "SENT"
-    # Add other fields if the API returns more for a successful send
-
-# Define other potential data types for success responses if needed
-# class OtherSuccessData(BaseModel):
-#     some_field: str
+    message_id: Union[str, int] = Field(alias="msgId")
+    jid: str = Field(
+        alias="jid",
+        description='The WhatsApp JID (e.g., "<user_id>@s.whatsapp.net")'
+    )
+    status: Optional[Literal['in_progress', 'sent']] = None
 
 class WasenderSuccessResponse(BaseModel):
     success: bool = True
-    message: str
+    message: Optional[str] = None
     # Make data a Union of possible successful data structures or Any
     data: Optional[Union[WasenderMessageSentData, Dict[str, Any], List[Any], str, None]] = None
 
