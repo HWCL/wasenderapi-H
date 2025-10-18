@@ -118,3 +118,28 @@ class RetryConfig:
 class WasenderSendResult(BaseModel):
     response: WasenderSuccessResponse
     rate_limit: Optional[RateLimitInfo] = None
+
+
+class WasenderOperationResult(BaseModel):
+    response: WasenderSuccessResponse
+    rate_limit: Optional[RateLimitInfo] = None
+
+
+class MessageInfoResult(BaseModel):
+    response: WasenderSuccessResponse
+    rate_limit: Optional[RateLimitInfo] = None
+
+
+class UploadMediaFileResult(BaseModel):
+    response: WasenderSuccessResponse
+    rate_limit: Optional[RateLimitInfo] = None
+
+
+class DecryptMediaResult(BaseModel):
+    response: WasenderSuccessResponse
+    rate_limit: Optional[RateLimitInfo] = None
+
+
+class CheckWhatsAppNumberResult(BaseModel):
+    response: WasenderSuccessResponse
+    rate_limit: Optional[RateLimitInfo] = None

@@ -1,7 +1,7 @@
 import json
 from enum import Enum
 from typing import Dict, Any, Optional, List, Union, TypeVar, Generic, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from .groups import GroupParticipant
 
 # NOTE: All webhook event model fields are now optional to handle the dynamic 
@@ -45,12 +45,19 @@ class WasenderWebhookEventType(str, Enum):
     MESSAGES_UPDATE = 'messages.update'      # Message status update
     MESSAGES_DELETE = 'messages.delete'
     MESSAGES_REACTION = 'messages.reaction'
+    MESSAGES_RECIEVED = 'messages.recieved'
     # Message Receipt
     MESSAGE_RECEIPT_UPDATE = 'message-receipt.update'
     # Session Events
     MESSAGE_SENT = 'message.sent'          # Message successfully sent
     SESSION_STATUS = 'session.status'
     QRCODE_UPDATED = 'qrcode.updated'
+    # New Events
+    CALL_RECEIVED = 'call.received'
+    PERSONAL_MESSAGE_RECEIVED = 'messages-personal.received'
+    NEWSLETTER_MESSAGE_RECEIVED = 'messages-newsletter.received'
+    GROUP_MESSAGE_RECEIVED = 'messages-group.received'
+    POLL_RESULTS = 'poll.results'
 
 EventType = TypeVar('EventType', bound=WasenderWebhookEventType)
 DataType = TypeVar('DataType')
@@ -188,11 +195,27 @@ MessagesUpsertEvent = BaseWebhookEvent[Literal[WasenderWebhookEventType.MESSAGES
 MessagesUpdateEvent = BaseWebhookEvent[Literal[WasenderWebhookEventType.MESSAGES_UPDATE], List[MessagesUpdateDataEntry]]
 MessagesDeleteEvent = BaseWebhookEvent[Literal[WasenderWebhookEventType.MESSAGES_DELETE], MessagesDeleteData]
 MessagesReactionEvent = BaseWebhookEvent[Literal[WasenderWebhookEventType.MESSAGES_REACTION], List[MessagesReactionDataEntry]]
+MessagesRecievedEvent = BaseWebhookEvent[Literal[WasenderWebhookEventType.MESSAGES_RECIEVED], Dict[str, Any]]
 
 MessageReceiptUpdateEvent = BaseWebhookEvent[Literal[WasenderWebhookEventType.MESSAGE_RECEIPT_UPDATE], List[MessageReceiptUpdateDataEntry]]
 MessageSentEvent = BaseWebhookEvent[Literal[WasenderWebhookEventType.MESSAGE_SENT], MessageSentData]
 SessionStatusEvent = BaseWebhookEvent[Literal[WasenderWebhookEventType.SESSION_STATUS], SessionStatusData]
 QrCodeUpdatedEvent = BaseWebhookEvent[Literal[WasenderWebhookEventType.QRCODE_UPDATED], QrCodeUpdatedData]
+
+CallReceivedEvent = BaseWebhookEvent[Literal[WasenderWebhookEventType.CALL_RECEIVED], Dict[str, Any]]
+PersonalMessageReceivedEvent = BaseWebhookEvent[Literal[WasenderWebhookEventType.PERSONAL_MESSAGE_RECEIVED], Dict[str, Any]]
+NewsletterMessageReceivedEvent = BaseWebhookEvent[Literal[WasenderWebhookEventType.NEWSLETTER_MESSAGE_RECEIVED], Dict[str, Any]]
+GroupMessageReceivedEvent = BaseWebhookEvent[Literal[WasenderWebhookEventType.GROUP_MESSAGE_RECEIVED], Dict[str, Any]]
+PollResultsEvent = BaseWebhookEvent[Literal[WasenderWebhookEventType.POLL_RESULTS], Dict[str, Any]]
+
+
+class UnknownWebhookEvent(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    event: Optional[str] = None
+    timestamp: Optional[int] = None
+    data: Optional[Any] = None
+    session_id: Optional[str] = Field(None, alias="sessionId")
 
 # Discriminated union of all specific event types for parsing
 WasenderWebhookEvent = Union[
@@ -200,5 +223,9 @@ WasenderWebhookEvent = Union[
     GroupsUpsertEvent, GroupsUpdateEvent, GroupParticipantsUpdateEvent,
     ContactsUpsertEvent, ContactsUpdateEvent,
     MessagesUpsertEvent, MessagesUpdateEvent, MessagesDeleteEvent, MessagesReactionEvent,
-    MessageReceiptUpdateEvent, MessageSentEvent, SessionStatusEvent, QrCodeUpdatedEvent
+    MessageReceiptUpdateEvent, MessageSentEvent, SessionStatusEvent, QrCodeUpdatedEvent,
+    MessagesRecievedEvent,
+    CallReceivedEvent, PersonalMessageReceivedEvent, NewsletterMessageReceivedEvent,
+    GroupMessageReceivedEvent, PollResultsEvent,
+    UnknownWebhookEvent
 ]

@@ -10,7 +10,8 @@ from wasenderapi.webhook import (
     WasenderWebhookEventType as WebhookEventType,
     # WebhookHandler, # Removed: Does not exist
     WasenderWebhookEvent, # Import the Union type for direct parsing tests
-    MessagesUpsertData, SessionStatusData, QrCodeUpdatedData, GroupMetadata as WebhookGroupMetadata
+    MessagesUpsertData, SessionStatusData, QrCodeUpdatedData, GroupMetadata as WebhookGroupMetadata,
+    UnknownWebhookEvent
 )
 from typing import Dict, Any
 from dataclasses import dataclass
@@ -348,6 +349,21 @@ class TestWebhookEventHandling:
         assert payload.data[0].key.id == message_key_data["id"]
         assert payload.data[0].reaction.text == reaction_data["text"]
 
+    def test_parses_messages_recieved_event_correctly_model(self):
+        payload = {
+            "event": WebhookEventType.MESSAGES_RECIEVED.value,
+            "timestamp": 1711111100,
+            "data": {
+                "from": "123@s.whatsapp.net",
+                "id": "MSG123",
+                "message": {"conversation": "Hello there"}
+            }
+        }
+        adapter = TypeAdapter(WasenderWebhookEvent)
+        parsed = adapter.validate_python(payload)
+        assert parsed.event == WebhookEventType.MESSAGES_RECIEVED
+        assert parsed.data["id"] == "MSG123"
+
     def test_parses_session_status_event_correctly_model(self):
         session_status_data = {"status": "CONNECTED", "reason": "User initiated connection"}
         payload = {
@@ -372,6 +388,44 @@ class TestWebhookEventHandling:
         assert payload.event == WebhookEventType.QRCODE_UPDATED
         assert payload.data.qr == qr_code_updated_data["qr"]
         assert payload.data.session_id == qr_code_updated_data["sessionId"]
+
+    def test_parses_call_received_event_with_generic_payload(self):
+        payload = {
+            "event": WebhookEventType.CALL_RECEIVED.value,
+            "timestamp": 1711111111,
+            "data": {"caller": "user@s.whatsapp.net", "callId": "ABC123"}
+        }
+        adapter = TypeAdapter(WasenderWebhookEvent)
+        parsed = adapter.validate_python(payload)
+        assert parsed.event == WebhookEventType.CALL_RECEIVED
+        assert parsed.data["caller"] == "user@s.whatsapp.net"
+
+    def test_parses_poll_results_event_with_generic_payload(self):
+        payload = {
+            "event": WebhookEventType.POLL_RESULTS.value,
+            "timestamp": 1711111112,
+            "data": {
+                "pollId": "poll-1",
+                "votes": {"option-a": 5, "option-b": 3}
+            }
+        }
+        adapter = TypeAdapter(WasenderWebhookEvent)
+        parsed = adapter.validate_python(payload)
+        assert parsed.event == WebhookEventType.POLL_RESULTS
+        assert parsed.data["votes"]["option-a"] == 5
+
+    def test_falls_back_to_unknown_webhook_event(self):
+        payload = {
+            "event": "completely.unknown",
+            "timestamp": 1711111113,
+            "data": {"foo": "bar"},
+            "sessionId": "session-xyz"
+        }
+        adapter = TypeAdapter(WasenderWebhookEvent)
+        parsed = adapter.validate_python(payload)
+        assert isinstance(parsed, UnknownWebhookEvent)
+        assert parsed.event == "completely.unknown"
+        assert parsed.session_id == "session-xyz"
 
 # Client specific fixtures and tests - REMOVED
 # @pytest.fixture

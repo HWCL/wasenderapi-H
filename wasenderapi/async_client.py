@@ -1,16 +1,22 @@
 import json
 import time
 import asyncio # Added for async operations
-from typing import Optional, Dict, Any, Union, List, TypeVar, Generic, Callable
+import mimetypes
+from pathlib import Path
+from typing import Optional, Dict, Any, Union, List
 import httpx # Added for async HTTP requests
-from urllib.parse import urlencode
 from ._version import __version__ as SDK_VERSION # Import from _version.py
 from .models import (
     BaseMessage,
     WasenderSuccessResponse,
     RateLimitInfo,
     WasenderSendResult,
-    RetryConfig
+    RetryConfig,
+    WasenderOperationResult,
+    UploadMediaFileResult,
+    DecryptMediaResult,
+    MessageInfoResult,
+    CheckWhatsAppNumberResult
 )
 from .errors import WasenderAPIError
 from .webhook import (
@@ -31,7 +37,17 @@ from .groups import (
     ModifyGroupParticipantsResult,
     ModifyGroupParticipantsPayload,
     UpdateGroupSettingsPayload,
-    UpdateGroupSettingsResult
+    UpdateGroupSettingsResult,
+    CreateGroupPayload,
+    CreateGroupResult,
+    UpdateGroupParticipantsPayload,
+    UpdateGroupParticipantsResult,
+    LeaveGroupResult,
+    AcceptGroupInvitePayload,
+    AcceptGroupInviteResult,
+    GetGroupInviteInfoResult,
+    GetGroupInviteLinkResult,
+    GetGroupProfilePictureResult
 )
 from .sessions import (
     CreateWhatsAppSessionPayload,
@@ -120,7 +136,10 @@ class WasenderAsyncClient:
         method: str,
         path: str,
         body: Optional[Dict[str, Any]] = None,
-        use_personal_token: bool = False
+        use_personal_token: bool = False,
+        params: Optional[Dict[str, Any]] = None,
+        files: Optional[Dict[str, Any]] = None,
+        data: Optional[Any] = None
     ) -> Any:
         url = f"{self.base_url}{path}"
         headers = {
@@ -128,7 +147,12 @@ class WasenderAsyncClient:
             "User-Agent": f"wasenderapi-python-sdk/{SDK_VERSION}"
         }
 
-        if use_personal_token and self.personal_access_token:
+        if use_personal_token:
+            if not self.personal_access_token:
+                raise ValueError(
+                    "This endpoint requires a personal access token. "
+                    "Provide 'personal_access_token' when creating the client."
+                )
             headers["Authorization"] = f"Bearer {self.personal_access_token}"
         else:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -148,9 +172,20 @@ class WasenderAsyncClient:
             "headers": headers
         }
 
-        if method in ["POST", "PUT"]:
+        if params:
+            request_kwargs["params"] = params
+
+        if files:
+            request_kwargs["files"] = files
+
+        if data is not None:
+            request_kwargs["data"] = data
+
+        if method in ["POST", "PUT"] and not files and data is None:
             headers["Content-Type"] = "application/json"
             request_kwargs["json"] = processed_body or {}
+        elif processed_body and not files and data is None and method not in ["POST", "PUT"]:
+            request_kwargs["json"] = processed_body
 
         attempts = 0
         rate_limit_info: Optional[RateLimitInfo] = None
@@ -242,14 +277,41 @@ class WasenderAsyncClient:
                     api_message=raw_response.text
                 ) from e
 
-    async def _post_internal(self, path: str, payload: Optional[Dict[str, Any]], use_personal_token: bool = False) -> Dict[str, Any]:
-        return await self._request("POST", path, body=payload, use_personal_token=use_personal_token)
+    async def _post_internal(
+        self,
+        path: str,
+        payload: Optional[Dict[str, Any]],
+        use_personal_token: bool = False,
+        params: Optional[Dict[str, Any]] = None,
+        files: Optional[Dict[str, Any]] = None,
+        data: Optional[Any] = None
+    ) -> Dict[str, Any]:
+        return await self._request(
+            "POST",
+            path,
+            body=payload,
+            use_personal_token=use_personal_token,
+            params=params,
+            files=files,
+            data=data
+        )
 
-    async def _get_internal(self, path: str, use_personal_token: bool = False) -> Dict[str, Any]:
-        return await self._request("GET", path, use_personal_token=use_personal_token)
+    async def _get_internal(
+        self,
+        path: str,
+        use_personal_token: bool = False,
+        params: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        return await self._request("GET", path, use_personal_token=use_personal_token, params=params)
 
-    async def _put_internal(self, path: str, payload: Dict[str, Any], use_personal_token: bool = False) -> Dict[str, Any]:
-        return await self._request("PUT", path, body=payload, use_personal_token=use_personal_token)
+    async def _put_internal(
+        self,
+        path: str,
+        payload: Dict[str, Any],
+        use_personal_token: bool = False,
+        params: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        return await self._request("PUT", path, body=payload, use_personal_token=use_personal_token, params=params)
 
     async def _delete_internal(self, path: str, use_personal_token: bool = False) -> Dict[str, Any]:
         return await self._request("DELETE", path, use_personal_token=use_personal_token)
@@ -351,6 +413,172 @@ class WasenderAsyncClient:
         }
         result = await self._post_internal("/send-message", payload)
         return WasenderSendResult(**result)
+
+    async def send_message_with_mentions(
+        self,
+        group_jid: str,
+        text_body: str,
+        mentions: List[str],
+        **kwargs: Any
+    ) -> WasenderSendResult:
+        if not group_jid or not group_jid.endswith("@g.us"):
+            raise ValueError("group_jid must be a valid WhatsApp group JID ending with '@g.us'.")
+        if not text_body or not text_body.strip():
+            raise ValueError("text_body must be a non-empty string.")
+        if not mentions:
+            raise ValueError("mentions must contain at least one participant JID.")
+        if any(not isinstance(m, str) or not m.strip() for m in mentions):
+            raise ValueError("mentions must contain only non-empty strings.")
+
+        payload: Dict[str, Any] = {**kwargs}
+        payload.update({
+            "to": group_jid,
+            "messageType": "text",
+            "text": text_body,
+            "mentions": mentions
+        })
+        result = await self._post_internal("/send-message", payload)
+        return WasenderSendResult(**result)
+
+    async def send_quoted_message(
+        self,
+        to: str,
+        reply_to: Optional[int] = None,
+        *,
+        text: Optional[str] = None,
+        mentions: Optional[List[str]] = None,
+        **message_payload: Any
+    ) -> WasenderSendResult:
+        payload: Dict[str, Any] = {"to": to}
+
+        if reply_to is not None:
+            if not isinstance(reply_to, int) or reply_to <= 0:
+                raise ValueError("reply_to must be a positive integer if provided.")
+            payload["replyTo"] = reply_to
+
+        if text is not None:
+            if not text.strip():
+                raise ValueError("text cannot be empty when provided.")
+            payload["text"] = text
+
+        if mentions is not None:
+            if not mentions:
+                raise ValueError("mentions must contain at least one entry when provided.")
+            if any(not isinstance(m, str) or not m.strip() for m in mentions):
+                raise ValueError("mentions must contain only non-empty strings.")
+            payload["mentions"] = mentions
+
+        payload.update(message_payload)
+
+        inferred_type = payload.get("messageType")
+        if not inferred_type:
+            for field, message_type in [
+                ("imageUrl", "image"),
+                ("videoUrl", "video"),
+                ("documentUrl", "document"),
+                ("audioUrl", "audio"),
+                ("stickerUrl", "sticker"),
+                ("contact", "contact"),
+                ("location", "location"),
+            ]:
+                if field in payload:
+                    inferred_type = message_type
+                    break
+
+        if not inferred_type:
+            inferred_type = "text"
+
+        payload["messageType"] = inferred_type
+
+        if inferred_type == "text" and "text" not in payload:
+            raise ValueError("A text value must be provided for text reply messages.")
+
+        result = await self._post_internal("/send-message", payload)
+        return WasenderSendResult(**result)
+
+    async def edit_message(self, message_id: int, new_text: str) -> WasenderOperationResult:
+        if message_id <= 0:
+            raise ValueError("message_id must be a positive integer.")
+        if not new_text or not new_text.strip():
+            raise ValueError("new_text must be a non-empty string.")
+        payload = {"text": new_text}
+        result = await self._put_internal(f"/messages/{message_id}", payload)
+        return WasenderOperationResult(**result)
+
+    async def delete_message(self, message_id: int) -> WasenderOperationResult:
+        if message_id <= 0:
+            raise ValueError("message_id must be a positive integer.")
+        result = await self._delete_internal(f"/messages/{message_id}")
+        return WasenderOperationResult(**result)
+
+    async def get_message_info(self, message_id: int) -> MessageInfoResult:
+        if message_id <= 0:
+            raise ValueError("message_id must be a positive integer.")
+        result = await self._get_internal(f"/messages/{message_id}/info")
+        return MessageInfoResult(**result)
+
+    async def send_presence_update(
+        self,
+        jid: str,
+        presence_type: str,
+        delay_ms: Optional[int] = None
+    ) -> WasenderOperationResult:
+        allowed_types = {"composing", "recording", "available", "unavailable"}
+        if presence_type not in allowed_types:
+            raise ValueError(f"presence_type must be one of {sorted(allowed_types)}")
+        payload: Dict[str, Any] = {"jid": jid, "type": presence_type}
+        if delay_ms is not None:
+            if delay_ms < 0:
+                raise ValueError("delay_ms cannot be negative.")
+            payload["delayMs"] = delay_ms
+        result = await self._post_internal("/send-presence-update", payload)
+        return WasenderOperationResult(**result)
+
+    async def decrypt_media_file(self, message_payload: Dict[str, Any]) -> DecryptMediaResult:
+        if not message_payload:
+            raise ValueError("message_payload must not be empty.")
+        result = await self._post_internal("/decrypt-media", message_payload)
+        return DecryptMediaResult(**result)
+
+    async def upload_media_file(
+        self,
+        *,
+        file_path: Optional[Union[str, Path]] = None,
+        file_bytes: Optional[bytes] = None,
+        filename: Optional[str] = None,
+        base64_data: Optional[str] = None,
+        mimetype_hint: Optional[str] = None
+    ) -> UploadMediaFileResult:
+        if base64_data:
+            payload: Dict[str, Any] = {"base64": base64_data}
+            if mimetype_hint:
+                payload["mimetype"] = mimetype_hint
+            result = await self._post_internal("/upload", payload)
+            return UploadMediaFileResult(**result)
+
+        if file_path:
+            resolved_path = Path(file_path)
+            if not resolved_path.is_file():
+                raise FileNotFoundError(f"File not found: {resolved_path}")
+            filename = filename or resolved_path.name
+            mimetype = mimetype_hint or mimetypes.guess_type(resolved_path.name)[0] or "application/octet-stream"
+            file_bytes = await asyncio.to_thread(resolved_path.read_bytes)
+
+        if file_bytes is not None:
+            if not filename:
+                raise ValueError("filename is required when providing file_bytes.")
+            mimetype = mimetype_hint or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+            files = {"file": (filename, file_bytes, mimetype)}
+            result = await self._request("POST", "/upload", use_personal_token=False, files=files)
+            return UploadMediaFileResult(**result)
+
+        raise ValueError("Provide either base64_data, file_path, or file_bytes to upload media.")
+
+    async def check_if_on_whatsapp(self, phone_number: str) -> CheckWhatsAppNumberResult:
+        if not phone_number or not phone_number.strip():
+            raise ValueError("phone_number must be a non-empty string.")
+        result = await self._get_internal(f"/on-whatsapp/{phone_number}")
+        return CheckWhatsAppNumberResult(**result)
     
     async def get_contacts(self) -> GetAllContactsResult:
         result = await self._get_internal("/contacts")
@@ -394,56 +622,103 @@ class WasenderAsyncClient:
         result = await self._post_internal(f"/groups/{group_jid}/participants/remove", payload)
         return ModifyGroupParticipantsResult(**result)
 
+    async def update_group_participants(self, group_jid: str, action: str, participants: List[str]) -> UpdateGroupParticipantsResult:
+        payload_model = UpdateGroupParticipantsPayload(action=action, participants=participants)
+        payload = payload_model.model_dump(by_alias=True)
+        result = await self._put_internal(f"/groups/{group_jid}/participants/update", payload)
+        return UpdateGroupParticipantsResult(**result)
+
     async def update_group_settings(self, group_jid: str, settings: UpdateGroupSettingsPayload) -> UpdateGroupSettingsResult:
         payload_dict = settings.model_dump(by_alias=True, exclude_none=True)
         result = await self._put_internal(f"/groups/{group_jid}/settings", payload_dict)
         return UpdateGroupSettingsResult(**result)
 
+    async def create_group(self, name: str, participants: Optional[List[str]] = None) -> CreateGroupResult:
+        payload = CreateGroupPayload(name=name, participants=participants).model_dump(exclude_none=True, by_alias=True)
+        result = await self._post_internal("/groups", payload)
+        return CreateGroupResult(**result)
+
+    async def leave_group(self, group_jid: str) -> LeaveGroupResult:
+        result = await self._post_internal(f"/groups/{group_jid}/leave", None)
+        return LeaveGroupResult(**result)
+
+    async def accept_group_invite(self, invite_code: str) -> AcceptGroupInviteResult:
+        payload = AcceptGroupInvitePayload(code=invite_code).model_dump(by_alias=True)
+        result = await self._post_internal("/groups/invite/accept", payload)
+        return AcceptGroupInviteResult(**result)
+
+    async def get_group_invite_info(self, invite_code: str) -> GetGroupInviteInfoResult:
+        result = await self._get_internal(f"/groups/invite/{invite_code}")
+        return GetGroupInviteInfoResult(**result)
+
+    async def get_group_invite_link(self, group_jid: str) -> GetGroupInviteLinkResult:
+        result = await self._get_internal(f"/groups/{group_jid}/invite-link")
+        return GetGroupInviteLinkResult(**result)
+
+    async def get_group_profile_picture(self, group_jid: str) -> GetGroupProfilePictureResult:
+        result = await self._get_internal(f"/groups/{group_jid}/picture")
+        return GetGroupProfilePictureResult(**result)
+
     async def get_all_whatsapp_sessions(self) -> GetAllWhatsAppSessionsResult:
+        self._ensure_personal_token()
         result = await self._get_internal("/whatsapp-sessions", use_personal_token=True)
         return GetAllWhatsAppSessionsResult(**result)
 
     async def create_whatsapp_session(self, payload: CreateWhatsAppSessionPayload) -> CreateWhatsAppSessionResult:
+        self._ensure_personal_token()
         payload_dict = payload.model_dump(by_alias=True)
         result = await self._post_internal("/whatsapp-sessions", payload_dict, use_personal_token=True)
         return CreateWhatsAppSessionResult(**result)
 
     async def get_whatsapp_session_details(self, session_id: int) -> GetWhatsAppSessionDetailsResult:
+        self._ensure_personal_token()
         result = await self._get_internal(f"/whatsapp-sessions/{session_id}", use_personal_token=True)
         return GetWhatsAppSessionDetailsResult(**result)
 
     async def update_whatsapp_session(self, session_id: int, payload: UpdateWhatsAppSessionPayload) -> UpdateWhatsAppSessionResult:
+        self._ensure_personal_token()
         payload_dict = payload.model_dump(by_alias=True, exclude_none=True)
         result = await self._put_internal(f"/whatsapp-sessions/{session_id}", payload_dict, use_personal_token=True)
         return UpdateWhatsAppSessionResult(**result)
 
     async def delete_whatsapp_session(self, session_id: int) -> DeleteWhatsAppSessionResult:
+        self._ensure_personal_token()
         result = await self._delete_internal(f"/whatsapp-sessions/{session_id}", use_personal_token=True)
         return DeleteWhatsAppSessionResult(**result)
 
     async def connect_whatsapp_session(self, session_id: int, qr_as_image: Optional[bool] = None) -> ConnectSessionResult:
-        params = {"qrAsImage": "true"} if qr_as_image else {}
-        path = f"/whatsapp-sessions/{session_id}/connect"
-        if params:
-            path += "?" + urlencode(params)
-        result = await self._post_internal(path, None, use_personal_token=True)
+        self._ensure_personal_token()
+        params = {"qrAsImage": "true"} if qr_as_image else None
+        result = await self._post_internal(
+            f"/whatsapp-sessions/{session_id}/connect",
+            None,
+            use_personal_token=True,
+            params=params
+        )
         return ConnectSessionResult(**result)
 
     async def get_whatsapp_session_qr_code(self, session_id: int) -> GetQRCodeResult:
+        self._ensure_personal_token()
         result = await self._get_internal(f"/whatsapp-sessions/{session_id}/qr-code", use_personal_token=True)
         return GetQRCodeResult(**result)
 
     async def disconnect_whatsapp_session(self, session_id: int) -> DisconnectSessionResult:
+        self._ensure_personal_token()
         result = await self._post_internal(f"/whatsapp-sessions/{session_id}/disconnect", None, use_personal_token=True)
         return DisconnectSessionResult(**result)
 
     async def regenerate_api_key(self, session_id: int) -> RegenerateApiKeyResult:
+        self._ensure_personal_token()
         result = await self._post_internal(f"/whatsapp-sessions/{session_id}/regenerate-api-key", None, use_personal_token=True)
         return RegenerateApiKeyResult(**result)
 
     async def get_session_status(self, session_id: str) -> GetSessionStatusResult:
-        result = await self._get_internal(f"/sessions/{session_id}/status", use_personal_token=True)
+        result = await self._get_internal(f"/sessions/{session_id}/status", use_personal_token=False)
         return GetSessionStatusResult(**result)
+
+    async def get_session_user_info(self) -> WasenderOperationResult:
+        result = await self._get_internal("/user", use_personal_token=False)
+        return WasenderOperationResult(**result)
 
     async def handle_webhook_event(
         self,
@@ -466,6 +741,13 @@ class WasenderAsyncClient:
             raise WasenderAPIError("Invalid JSON in webhook body", status_code=400) from e
         except Exception as e:
             raise WasenderAPIError(f"Invalid webhook event data: {str(e)}", status_code=400) from e
+
+    def _ensure_personal_token(self) -> None:
+        if not self.personal_access_token:
+            raise ValueError(
+                "This endpoint requires a personal access token. "
+                "Provide 'personal_access_token' when creating the client."
+            )
 
 def create_async_wasender(
     api_key: str,

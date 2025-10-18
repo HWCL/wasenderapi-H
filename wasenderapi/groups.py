@@ -1,6 +1,7 @@
-from typing import List, Optional
-from pydantic import BaseModel, Field
-from .models import RateLimitInfo
+from typing import List, Optional, Any
+from typing import Literal
+from pydantic import BaseModel, Field, model_validator
+from .models import RateLimitInfo, WasenderSuccessResponse
 
 class GroupParticipant(BaseModel):
     id: str
@@ -34,6 +35,53 @@ class GroupMetadata(BasicGroupInfo):
 
 class ModifyGroupParticipantsPayload(BaseModel):
     participants: List[str]
+
+    @model_validator(mode="after")
+    def validate_participants(self) -> "ModifyGroupParticipantsPayload":
+        if not self.participants:
+            raise ValueError("participants must contain at least one entry")
+        if any(not isinstance(p, str) or not p.strip() for p in self.participants):
+            raise ValueError("participants must contain only non-empty strings")
+        return self
+
+
+class UpdateGroupParticipantsPayload(BaseModel):
+    action: Literal["promote", "demote"]
+    participants: List[str]
+
+    @model_validator(mode="after")
+    def validate_payload(self) -> "UpdateGroupParticipantsPayload":
+        if not self.participants:
+            raise ValueError("participants must contain at least one entry")
+        if any(not isinstance(p, str) or not p.strip() for p in self.participants):
+            raise ValueError("participants must contain only non-empty strings")
+        return self
+
+
+class CreateGroupPayload(BaseModel):
+    name: str
+    participants: Optional[List[str]] = None
+
+    @model_validator(mode="after")
+    def validate_payload(self) -> "CreateGroupPayload":
+        if not self.name or not self.name.strip():
+            raise ValueError("Group name must be a non-empty string")
+        if self.participants is not None:
+            if not isinstance(self.participants, list):
+                raise ValueError("participants must be a list of strings")
+            if any(not isinstance(p, str) or not p.strip() for p in self.participants):
+                raise ValueError("participants must contain only non-empty strings")
+        return self
+
+
+class AcceptGroupInvitePayload(BaseModel):
+    code: str
+
+    @model_validator(mode="after")
+    def validate_code(self) -> "AcceptGroupInvitePayload":
+        if not self.code or not self.code.strip():
+            raise ValueError("Invite code must be a non-empty string")
+        return self
 
 class UpdateGroupSettingsPayload(BaseModel):
     subject: Optional[str] = None
@@ -70,6 +118,12 @@ class ModifyGroupParticipantsResponse(BaseModel):
     message: Optional[str] = None
     data: List[ParticipantActionStatus]
 
+
+class UpdateGroupParticipantsResponse(BaseModel):
+    success: bool = True
+    message: Optional[str] = None
+    data: List[ParticipantActionStatus]
+
 class UpdateGroupSettingsResponse(BaseModel):
     success: bool = True
     message: Optional[str] = None
@@ -95,3 +149,78 @@ class ModifyGroupParticipantsResult(BaseModel):
 class UpdateGroupSettingsResult(BaseModel):
     response: UpdateGroupSettingsResponse
     rate_limit: Optional[RateLimitInfo] = None 
+
+
+class CreateGroupResult(BaseModel):
+    response: WasenderSuccessResponse
+    rate_limit: Optional[RateLimitInfo] = None
+
+
+class UpdateGroupParticipantsResult(BaseModel):
+    response: UpdateGroupParticipantsResponse
+    rate_limit: Optional[RateLimitInfo] = None
+
+
+class LeaveGroupResponse(BaseModel):
+    success: bool = True
+    message: Optional[str] = None
+    data: Optional[Any] = None
+
+
+class LeaveGroupResult(BaseModel):
+    response: LeaveGroupResponse
+    rate_limit: Optional[RateLimitInfo] = None
+
+
+class AcceptGroupInviteResult(BaseModel):
+    response: WasenderSuccessResponse
+    rate_limit: Optional[RateLimitInfo] = None
+
+
+class GetGroupInviteInfoData(BaseModel):
+    subject: Optional[str] = None
+    size: Optional[int] = None
+    owner: Optional[str] = None
+    invite_code: Optional[str] = Field(None, alias="inviteCode")
+    group_jid: Optional[str] = Field(None, alias="groupJid")
+
+
+class GetGroupInviteInfoResponse(BaseModel):
+    success: bool = True
+    message: Optional[str] = None
+    data: Optional[GetGroupInviteInfoData] = None
+
+
+class GetGroupInviteInfoResult(BaseModel):
+    response: GetGroupInviteInfoResponse
+    rate_limit: Optional[RateLimitInfo] = None
+
+
+class GetGroupInviteLinkData(BaseModel):
+    link: Optional[str] = None
+
+
+class GetGroupInviteLinkResponse(BaseModel):
+    success: bool = True
+    message: Optional[str] = None
+    data: Optional[GetGroupInviteLinkData] = None
+
+
+class GetGroupInviteLinkResult(BaseModel):
+    response: GetGroupInviteLinkResponse
+    rate_limit: Optional[RateLimitInfo] = None
+
+
+class GetGroupProfilePictureData(BaseModel):
+    url: Optional[str] = None
+
+
+class GetGroupProfilePictureResponse(BaseModel):
+    success: bool = True
+    message: Optional[str] = None
+    data: Optional[GetGroupProfilePictureData] = None
+
+
+class GetGroupProfilePictureResult(BaseModel):
+    response: GetGroupProfilePictureResponse
+    rate_limit: Optional[RateLimitInfo] = None
