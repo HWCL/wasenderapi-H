@@ -82,6 +82,14 @@ class MessageKey(BaseModel):
     from_me: Optional[bool] = Field(None, alias="fromMe")
     remote_jid: Optional[str] = Field(None, alias="remoteJid")
     participant: Optional[str] = None
+    msg_id: Optional[str] = Field(None, alias="msgId")
+    sender_pn: Optional[str] = Field(None, alias="senderPn")
+    cleared_sender_pn: Optional[bool] = Field(None, alias="clearedSenderPn")
+    sender_lid: Optional[str] = Field(None, alias="senderLid")
+    participant_pn: Optional[str] = Field(None, alias="participantPn")
+    participant_lid: Optional[str] = Field(None, alias="participantLid")
+    cleaned_participant_pn: Optional[bool] = Field(None, alias="cleanedParticipantPn")
+    addressing_mode: Optional[str] = Field(None, alias="addressingMode")
 
 # Chat Event Models
 class ChatEntry(BaseModel):
@@ -127,6 +135,7 @@ class MessageContent(BaseModel):
     sticker_message: Optional[Dict[str, Any]] = Field(None, alias="stickerMessage")
     contact_message: Optional[Dict[str, Any]] = Field(None, alias="contactMessage")
     location_message: Optional[Dict[str, Any]] = Field(None, alias="locationMessage")
+    message_body: Optional[str] = Field(None, alias="messageBody")
 
 class MessagesUpsertData(BaseModel):
     key: Optional[MessageKey] = None
