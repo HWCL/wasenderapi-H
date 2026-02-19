@@ -43,4 +43,36 @@ class GetContactProfilePictureResult(BaseModel):
 
 class ContactActionResult(BaseModel):
     response: ContactActionResponse
-    rate_limit: Optional[RateLimitInfo] = None 
+    rate_limit: Optional[RateLimitInfo] = None
+
+
+# GET /pn-from-lid/{lid} — resolve LID to phone number (JID)
+class PnFromLidData(BaseModel):
+    pn: str
+
+
+class PnFromLidResponse(BaseModel):
+    success: bool = True
+    message: Optional[str] = None
+    data: Optional[PnFromLidData] = None
+
+
+class PnFromLidResult(BaseModel):
+    response: PnFromLidResponse
+    rate_limit: Optional[RateLimitInfo] = None
+
+
+# GET /lid-from-pn/{pn} — resolve phone number to LID
+class LidFromPnData(BaseModel):
+    lid: str
+
+
+class LidFromPnResponse(BaseModel):
+    success: bool = True
+    message: Optional[str] = None
+    data: Optional[LidFromPnData] = None
+
+
+class LidFromPnResult(BaseModel):
+    response: LidFromPnResponse
+    rate_limit: Optional[RateLimitInfo] = None

@@ -1,8 +1,10 @@
 import json
+import re
 import time
 import mimetypes
 from pathlib import Path
 from typing import Optional, Dict, Any, Union, List
+from urllib.parse import quote
 import requests
 from ._version import __version__ as SDK_VERSION
 from .models import (
@@ -27,7 +29,9 @@ from .contacts import (
     GetAllContactsResult,
     GetContactInfoResult,
     GetContactProfilePictureResult,
-    ContactActionResult
+    ContactActionResult,
+    PnFromLidResult,
+    LidFromPnResult,
 )
 from .groups import (
     GetAllGroupsResult,
@@ -578,6 +582,20 @@ class WasenderSyncClient:
     def unblock_contact(self, contact_phone_number: str) -> ContactActionResult:
         result = self._post_internal(f"/contacts/{contact_phone_number}/unblock", None)
         return ContactActionResult(**result)
+
+    def get_pn_from_lid(self, lid: str) -> PnFromLidResult:
+        """Resolve LID to phone number (JID). GET /pn-from-lid/{lid}. lid may be e.g. 12345@lid or 12345."""
+        normalized = lid if "@lid" in lid else f"{lid}@lid"
+        path = f"/pn-from-lid/{quote(normalized, safe='')}"
+        result = self._get_internal(path)
+        return PnFromLidResult(**result)
+
+    def get_lid_from_pn(self, phone_number: str) -> LidFromPnResult:
+        """Resolve phone number to LID. GET /lid-from-pn/{pn}. phone_number should be digits only or E.164."""
+        pn = re.sub(r"\D", "", phone_number).lstrip("+") or phone_number
+        path = f"/lid-from-pn/{quote(pn, safe='')}"
+        result = self._get_internal(path)
+        return LidFromPnResult(**result)
 
     def get_groups(self) -> GetAllGroupsResult:
         result = self._get_internal("/groups")
